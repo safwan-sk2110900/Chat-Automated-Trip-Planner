@@ -1,0 +1,6 @@
+{
+  "name": "Odyssey - Travel Itinerary Planner with Voice & n8n Chatbots",
+  "description": "Bespoke travel itinerary planning for families, solo travelers, and couples featuring an ElevenLabs voice call concierge and n8n webhook chatbot.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
