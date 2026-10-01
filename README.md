@@ -5,6 +5,8 @@ An AI automation project that connects two conversational agents to a travel-pla
 - **TripPilot**: a text chatbot backed by a cloud-hosted **n8n** workflow with session memory.
 - **Voice Concierge**: a hands-free voice agent powered by an **ElevenLabs Conversational AI** agent.
 
+Both agents run on the **same n8n workflow**. The website connects to ElevenLabs for voice, and the ElevenLabs agent has the same `trippilot/chats` webhook added as a tool. The text chatbot and the voice agent therefore share one backend brain.
+
 The landing page is a lightweight mockup that serves as the host surface for both agents. The focus of this repo is the agent configuration, webhook contract, workflow orchestration, and context passing.
 
 ---
@@ -13,27 +15,26 @@ The landing page is a lightweight mockup that serves as the host surface for bot
 
 ```
 ┌──────────────────────────┐
-│  Landing Page (mockup)   │
-│  React 19 + Vite         │
-└───────┬─────────┬────────┘
-        │         │
-  Text chat     Voice call
-        │         │
-        ▼         ▼
-┌──────────────┐  ┌───────────────────────────┐
-│ Vite proxy   │  │ <elevenlabs-convai> widget │
-│ api webhook  │  │                            │
-│              │  │                            │
-│              │  │ (two-way voice streaming)  │
-└──────┬───────┘  └───────────────────────────┘
-       │ POST (JSON)
-       ▼
+│  Website (mockup host)   │
+└───────┬──────────┬───────┘
+        │          │
+   Text chat    Voice call
+        │          │
+        │          ▼
+        │   ┌───────────────────────────┐
+        │   │ ElevenLabs Voice Agent    │
+        │   │ (two-way voice streaming) │
+        │   └─────────────┬─────────────┘
+        │                 │ Webhook tool
+        │                 │ (same endpoint)
+        ▼                 ▼
 ┌──────────────────────────────────────────────┐
-│ n8n Cloud Webhook                            │
-│ /webhook/trippilot/chats                     │
+│ n8n Cloud Webhook: /webhook/trippilot/chats  │
 │  → AI Agent node → Memory (sessionId) → Reply│
 └──────────────────────────────────────────────┘
 ```
+
+**Why one workflow for both agents:** all travel logic, prompts, memory and integrations live in a single place. Updating the n8n workflow improves the chatbot and the voice agent at once, and both give consistent answers.
 
 ---
 
@@ -45,10 +46,9 @@ The landing page is a lightweight mockup that serves as the host surface for bot
 |---|---|
 | Method | `POST` |
 | Production URL | `https://safwankavil24.app.n8n.cloud/webhook/trippilot/chats` |
-| Local proxy route | `/api/trippilot-webhook` |
 | Headers | `Content-Type: application/json`, `Accept: application/json` |
 
-The front end never calls n8n directly. It calls the local reverse proxy (`vite.config.ts`), which forwards to the n8n webhook. This avoids CORS errors and iframe-sandbox failures.
+The text chat reaches n8n through a local reverse proxy configured in `vite.config.ts`. This avoids CORS errors and iframe-sandbox failures.
 
 ### Request Payload
 
@@ -149,16 +149,31 @@ curl -X POST "https://safwankavil24.app.n8n.cloud/webhook/trippilot/chats" \
 | Item | Value |
 |---|---|
 | Provider | ElevenLabs Conversational AI |
-| Agent ID | `agent_8501m3sm7e6cf3avvfk3846asq1r` |
 | Embed | Custom element `<elevenlabs-convai>` |
 | Mode | Two-way, hands-free voice streaming |
+| Backend | n8n workflow, via a webhook tool |
 
-### Embed (in `index.html`)
+### Connecting the Website to ElevenLabs
+
+The website embeds the ElevenLabs widget, so the voice call runs inside the page.
 
 ```html
-<elevenlabs-convai agent-id="agent_8501m3sm7e6cf3avvfk3846asq1r"></elevenlabs-convai>
+<elevenlabs-convai agent-id="YOUR_AGENT_ID"></elevenlabs-convai>
 <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
 ```
+
+### Connecting ElevenLabs to n8n (Webhook Tool)
+
+In the ElevenLabs agent settings, the same TripPilot webhook is added as a **tool**:
+
+| Setting | Value |
+|---|---|
+| Tool type | Webhook |
+| Method | `POST` |
+| URL | `https://safwankavil24.app.n8n.cloud/webhook/trippilot/chats` |
+| Body | `message` / `chatInput` (what the caller asked), `sessionId`, and trip context fields where available |
+
+When the caller asks something that needs travel knowledge, the voice agent calls this tool. n8n runs the AI Agent, returns `reply`, and the voice agent speaks it. Voice and text therefore use the same prompts, memory and logic.
 
 ### Behavior
 
@@ -172,7 +187,8 @@ curl -X POST "https://safwankavil24.app.n8n.cloud/webhook/trippilot/chats" \
 - [ ] System prompt defines the concierge persona, covering the three traveler archetypes (family, solo, couples)
 - [ ] First message / greeting is set
 - [ ] Voice and language are selected
-- [ ] Knowledge base uploaded (destinations, pacing styles, accommodation tiers)
+- [ ] Webhook tool added and pointed at the n8n `trippilot/chats` endpoint
+- [ ] Agent prompt tells it when to call the tool (any destination, itinerary, dining, or budget question)
 - [ ] Allowed domains include the deployment domain and `localhost`
 - [ ] Microphone permission flow tested in the target browsers
 
@@ -192,7 +208,7 @@ On viewports under **1024px**, both widgets collapse into a unified bottom dock 
 ## 4. Agent-Related Code Map
 
 ```
-├── vite.config.ts                  # Reverse proxy: /api/trippilot-webhook → n8n
+├── vite.config.ts                  # Reverse proxy to the n8n webhook
 ├── index.html                      # ElevenLabs widget embed
 ├── src/
 │   ├── components/
@@ -224,6 +240,8 @@ The itinerary builder holds the live trip state. TripPilot reads it on every mes
 3. `TextChatWidget` builds the payload with the latest `travelerType`, `destination`, `durationDays`, `budgetTier`, and `totalCostUsd`.
 4. n8n injects those values into the agent prompt, so answers always match the current plan.
 
+The voice agent reaches the same workflow through its webhook tool, so spoken answers use the same prompt and memory logic.
+
 ---
 
 ## 6. Tech Stack
@@ -231,8 +249,8 @@ The itinerary builder holds the live trip state. TripPilot reads it on every mes
 | Layer | Technology | Purpose |
 |---|---|---|
 | Automation | **n8n Cloud** | Webhook, AI Agent orchestration, session memory |
-| Voice | **ElevenLabs Conversational AI** | `<elevenlabs-convai>` widget, two-way voice |
-| Proxy | Vite dev-server proxy | CORS-safe bridge to n8n |
+| Voice | **ElevenLabs Conversational AI** | `<elevenlabs-convai>` widget; calls n8n through a webhook tool |
+| Proxy | Vite dev-server proxy | CORS-safe bridge from the text chat to n8n |
 | Host app | React 19 + TypeScript + Vite | Landing page mockup that hosts the agents |
 | Styling / Icons | Tailwind CSS v4, Lucide React | UI for the host surface |
 
@@ -253,7 +271,7 @@ npm run build    # Production bundle
 
 1. Open `http://localhost:3000`.
 2. Click the bottom-right chat and send a message. Check the n8n **Executions** tab for the run.
-3. Click the bottom-left orb and start a voice call. Check the ElevenLabs dashboard conversation history.
+3. Click the bottom-left orb and start a voice call. Ask a travel question and confirm a new run appears in the n8n **Executions** tab (this confirms the webhook tool works).
 
 ---
 
@@ -262,8 +280,9 @@ npm run build    # Production bundle
 | Symptom | Likely cause |
 |---|---|
 | Chat returns 404 | n8n workflow is inactive, or the test URL is used instead of the production URL |
-| Chat returns a CORS error | Request bypassed the `/api/trippilot-webhook` proxy |
+| Chat returns a CORS error | Request bypassed the local proxy |
 | Reply is empty | Respond to Webhook node is not returning a `reply` key |
 | No memory between turns | Memory node session key is not mapped to `sessionId` |
+| Voice agent answers but never triggers n8n | Webhook tool missing or its URL is wrong, or the prompt doesn't tell the agent when to call it |
 | Voice widget doesn't load | Domain not in the agent's allowlist, or the embed script is blocked |
 | Mic not working | Browser permission denied, or the page is not served over HTTPS (localhost is exempt) |
