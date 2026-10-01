@@ -22,9 +22,9 @@ The landing page is a lightweight mockup that serves as the host surface for bot
         ▼         ▼
 ┌──────────────┐  ┌───────────────────────────┐
 │ Vite proxy   │  │ <elevenlabs-convai> widget │
-│ /api/        │  │ agent_8501m3sm7e6cf3avvfk  │
-│ trippilot-   │  │ 3846asq1r                  │
-│ webhook      │  │ (two-way voice streaming)  │
+│ api webhook  │  │                            │
+│              │  │                            │
+│              │  │ (two-way voice streaming)  │
 └──────┬───────┘  └───────────────────────────┘
        │ POST (JSON)
        ▼
